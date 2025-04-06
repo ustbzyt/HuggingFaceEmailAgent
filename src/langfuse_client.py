@@ -1,31 +1,24 @@
 import os
-from langfuse import Langfuse
+from langfuse.callback import CallbackHandler
 from typing import Optional
 
-_langfuse_client: Optional[Langfuse] = None
+_langfuse_handler: Optional[CallbackHandler] = None
 
-def get_langfuse_client() -> Langfuse:
-    """
-    Initializes and returns the Langfuse client.
-
-    Raises:
-        ValueError: If the Langfuse public key or secret key is not found in environment variables.
-    """
-    global _langfuse_client
-    if _langfuse_client is None:
+def get_langfuse_handler() -> CallbackHandler:
+    global _langfuse_handler
+    if _langfuse_handler is None:
         public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
         secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
 
         if not public_key or not secret_key:
-            raise ValueError(
-                "Langfuse public key or secret key not found in environment variables."
-            )
+            raise ValueError("Langfuse public key or secret key not found in environment variables.")  
 
-        _langfuse_client = Langfuse(
-            public_key=public_key,
+        _langfuse_handler = CallbackHandler(
             secret_key=secret_key,
-            host="https://cloud.langfuse.com",  # Or your self-hosted instance URL
+            public_key=public_key,
+            host="https://cloud.langfuse.com"
         )
-    return _langfuse_client
+    return _langfuse_handler
 
-langfuse = get_langfuse_client()
+
+langfuse_handler = get_langfuse_handler()

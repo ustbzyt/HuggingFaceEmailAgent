@@ -1,6 +1,6 @@
 from agent.agent_core import compiled_graph
 from models.email_state import EmailState
-from src.langfuse_client import langfuse  # Import the langfuse client instance
+from src.langfuse_client import langfuse_handler  # Import the Langfuse callback
 
 # Example legitimate email
 legitimate_email = {
@@ -18,39 +18,38 @@ spam_email = {
 
 def process_email(email_content):
     """
-    Processes an email, logging the process with Langfuse, and invokes the compiled_graph.
+    Processes an email via the LangGraph compiled graph and logs with Langfuse via callback handler.
 
     Args:
         email_content (dict): The content of the email.
+        email_type (str): Type of email (e.g., 'legitimate', 'spam')
     """
-    trace = langfuse.trace(name="Process Email")
-    try:
-        # Your email processing logic here
-        print(f"Processing email...")
-        print(f"Email content: {email_content}")
+    print(f"\n📩 Processing email...")
+    print(f"Email content: {email_content}")
 
-        # Invoke the compiled_graph
-        result = compiled_graph.invoke({
-            "email": email_content,
-            "is_spam": None,
-            "spam_reason": None,
-            "email_category": None,
-            "draft_response": None,
-            "messages": []
-        })
-        print(f"Email result:")
+    try:
+        result = compiled_graph.invoke(
+            input={
+                "email": email_content,
+                "is_spam": None,
+                "spam_reason": None,
+                "email_category": None,
+                "draft_response": None,
+                "messages": []
+            },
+            config={
+                "callbacks": [langfuse_handler],
+                "metadata": {
+                    "sender": email_content.get("sender")
+                }
+            }
+        )
+
+        print("✅ Email processed successfully!")
         print(result)
 
-        # Example: Add an event to the trace
-        trace.event(name="Email Content", input=str(email_content))
-        trace.event(name="Graph Result", input=str(result))
-
     except Exception as e:
-        # Handle any errors that occur during processing
-        print(f"Error processing email: {e}")
-        trace.event(name="Error", level="ERROR", input=str(e))
-    finally:
-        trace.end()
+        print(f"❌ Error processing email: {e}")
 
 
 def main():
@@ -58,11 +57,9 @@ def main():
     The main function of the application.
     """
     # Process the legitimate email
-    print("Processing legitimate email...")
-    process_email(legitimate_email)
+    #process_email(legitimate_email)
 
     # Process the spam email
-    print("Processing spam email...")
     process_email(spam_email)
 
 if __name__ == "__main__":

@@ -1,76 +1,56 @@
 from langchain_core.messages import HumanMessage
-from langchain_ollama import ChatOllama  # Import ChatOllama here
-from models.email_state import EmailState  # Import EmailState
-import re
+from langchain_ollama import ChatOllama
+from models.email_state import EmailState
+import json
 
 def read_email(state: EmailState):
     """Alfred reads and logs the incoming email"""
     email = state["email"]
-
-    # Here we might do some initial preprocessing
     print(f"Alfred is processing an email from {email['sender']} with subject: {email['subject']}")
-
-    # No state changes needed here
     return {}
 
 
 def classify_email(state: EmailState, model: ChatOllama):
-    """Alfred uses an LLM to determine if the email is spam or legitimate"""
+    """Classifies the email as spam or legitimate using an LLM."""
     email = state["email"]
 
-    # Prepare our prompt for the LLM
     prompt = f"""
-    As Alfred the butler, analyze this email and determine if it is spam or legitimate.
+    You are Alfred, a helpful butler. Analyze the email and classify it as either SPAM or LEGITIMATE.
 
     Email:
     From: {email['sender']}
     Subject: {email['subject']}
     Body: {email['body']}
 
-    First, determine if this email is spam or legitimate.
-    If it is spam, explain why.
-    If it is legitimate, categorize it (inquiry, complaint, thank you, etc.).
-    Respond with either "SPAM" or "LEGITIMATE" at the end of your response.
+    Respond in the following JSON format:
+    {{
+        "classification": "SPAM" or "LEGITIMATE",
+        "reason": "Explanation of your decision",
+        "category": "inquiry/complaint/thank you/request/information" (only if LEGITIMATE)
+    }}
     """
 
-    # Call the LLM
     messages = [HumanMessage(content=prompt)]
     response = model.invoke(messages)
-    response_text = response.content.lower()
+    response_text = response.content.strip()
 
-    # Extract the classification (SPAM or LEGITIMATE)
-    if response_text.endswith("spam"):
+    try:
+        result = json.loads(response_text)
+        classification = result.get("classification", "").strip().lower()
+        is_spam = classification == "spam"
+        spam_reason = result.get("reason") if is_spam else None
+        email_category = result.get("category") if not is_spam else None
+    except Exception as e:
+        print("Error parsing model response:", e)
         is_spam = True
-    elif response_text.endswith("legitimate"):
-        is_spam = False
-    else:
-        print("Warning: LLM did not classify the email correctly. Defaulting to spam.")
-        is_spam = True
+        spam_reason = "Could not parse LLM response."
+        email_category = None
 
-    # Extract a reason if it's spam
-    spam_reason = None
-    if is_spam:
-        # Extract the reason after the word "reason:"
-        match = re.search(r"reason:(.*)", response_text)
-        if match:
-            spam_reason = match.group(1).strip()
-
-    # Determine category if legitimate
-    email_category = None
-    if not is_spam:
-        categories = ["inquiry", "complaint", "thank you", "request", "information"]
-        for category in categories:
-            if category in response_text:
-                email_category = category
-                break
-
-    # Update messages for tracking
     new_messages = state.get("messages", []) + [
         {"role": "user", "content": prompt},
         {"role": "assistant", "content": response.content}
     ]
 
-    # Return state updates
     return {
         "is_spam": is_spam,
         "spam_reason": spam_reason,
@@ -78,20 +58,19 @@ def classify_email(state: EmailState, model: ChatOllama):
         "messages": new_messages
     }
 
+
 def handle_spam(state: EmailState):
-    """Alfred discards spam email with a note"""
+    """Moves spam emails to the spam folder."""
     print(f"Alfred has marked the email as spam. Reason: {state['spam_reason']}")
     print("The email has been moved to the spam folder.")
-
-    # We're done processing this email
     return {}
 
-def draft_response(state: EmailState, model: ChatOllama):
-    """Alfred drafts a preliminary response for legitimate emails"""
-    email = state["email"]
-    category = state["email_category"] or "general"
 
-    # Prepare our prompt for the LLM
+def draft_response(state: EmailState, model: ChatOllama):
+    """Drafts a professional response to a legitimate email."""
+    email = state["email"]
+    category = state.get("email_category", "general")
+
     prompt = f"""
     As Alfred the butler, draft a polite preliminary response to this email.
 
@@ -105,41 +84,36 @@ def draft_response(state: EmailState, model: ChatOllama):
     Draft a brief, professional response that Mr. Hugg can review and personalize before sending.
     """
 
-    # Call the LLM
     messages = [HumanMessage(content=prompt)]
     response = model.invoke(messages)
 
-    # Update messages for tracking
     new_messages = state.get("messages", []) + [
         {"role": "user", "content": prompt},
         {"role": "assistant", "content": response.content}
     ]
 
-    # Return state updates
     return {
         "draft_response": response.content,
         "messages": new_messages
     }
 
+
 def notify_mr_hugg(state: EmailState):
-    """Alfred notifies Mr. Hugg about the email and presents the draft response"""
+    """Displays the email and draft response for Mr. Hugg's review."""
     email = state["email"]
 
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print(f"Sir, you've received an email from {email['sender']}.")
     print(f"Subject: {email['subject']}")
     print(f"Category: {state['email_category']}")
     print("\nI've prepared a draft response for your review:")
-    print("-"*50)
+    print("-" * 50)
     print(state["draft_response"])
-    print("="*50 + "\n")
+    print("=" * 50 + "\n")
 
-    # We're done processing this email
     return {}
 
+
 def route_email(state: EmailState) -> str:
-    """Determine the next step based on spam classification"""
-    if state["is_spam"]:
-        return "spam"
-    else:
-        return "legitimate"
+    """Routes email to the appropriate handler."""
+    return "spam" if state["is_spam"] else "legitimate"
