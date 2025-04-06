@@ -5,7 +5,7 @@ from agent.nodes import classify_email, draft_response, handle_spam, notify_mr_h
 from models.email_state import EmailState  # Import EmailState
 
 # Instantiate ChatOllama
-model = ChatOllama(model="deepseek-r1:1.5B")  # Replace with your model if needed
+model = ChatOllama(model="deepseek-r1:7B")  # Replace with your model if needed
 
 # Create the graph
 email_graph = StateGraph(EmailState)
